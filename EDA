@@ -1,0 +1,82 @@
+rm(list = ls())
+
+library(tidyverse)
+library(tidymodels)
+library(tidytext)
+library(GGally)
+
+#Read in the dataset
+df <- readr::read_csv("wallstreetbets_posts.csv")
+
+names(df)
+
+split <- initial_split(df, prop = 1/10)
+small_df <- training(split)
+
+#Making a correlation matrix for the numerical variables in the dataset
+
+ggcorr(df, label = TRUE, label_size = 2.9, hjust = 1, layout.exp = 2)
+
+#It looks like there are some strong correlations between some variables, although probably not surprising that the time that the post was created and the time that it was edited are strongly correlated, for example. It would be interesting to look at the relationship between total_awards_received and the content of the posts.
+
+df %>%
+  ggplot(aes(upvote_ratio,total_awards_received)) + 
+  geom_point(alpha = 0.3)
+
+#It looks like only a few users get very many awards.
+
+df %>%
+  ggplot(aes(x = total_awards_received)) +
+  geom_histogram(bins = 30) + 
+  scale_y_log10() + 
+  labs(x = "Total Awards Received", y = "Log(Count)")
+
+
+#Pull the words out of the post titles
+
+tidy_titles <- df %>%
+  unnest_tokens(word,title)
+
+#Count, sort, and visualize the most common words in the titles, removing stopwords
+tidy_titles %>%
+  anti_join(get_stopwords()) %>%
+  count(word, sort = TRUE) %>%
+  slice_max(n, n = 30) %>%
+  mutate(word = reorder(word,n)) %>%
+  ggplot(aes(n,word)) +
+  geom_col() +
+  labs(x = "Number of Occurances", y = "Word")
+
+#Unsurprisingly, GME (Game Stop) and AMC (the movie theatre) are the most common words in the titles.
+
+#Pull the words out of the post titles
+
+tidy_text <- df %>%
+  unnest_tokens(word,selftext)
+
+#Count, sort, and visualize the most common words in the titles, removing stopwords
+#This bargraph looks at users who have received many awards
+tidy_text %>%
+  filter(total_awards_received > 200) %>%
+  anti_join(get_stopwords()) %>%
+  count(word, sort = TRUE) %>%
+  filter(word != "NA", word != "removed", word != "deleted")  %>%
+  slice_max(n, n = 30) %>%
+  mutate(word = reorder(word,n)) %>%
+  ggplot(aes(n,word)) +
+  geom_col() +
+  labs(x = "Number of Occurances", y = "Word")
+
+#And this one users who have not recevied as many awards
+tidy_text %>%
+  filter(total_awards_received <= 200) %>%
+  anti_join(get_stopwords()) %>%
+  count(word, sort = TRUE) %>%
+  filter(word != "NA", word != "removed", word != "deleted")  %>%
+  slice_max(n, n = 30) %>%
+  mutate(word = reorder(word,n)) %>%
+  ggplot(aes(n,word)) +
+  geom_col() +
+  labs(x = "Number of Occurances", y = "Word")
+
+#It would be interesting to do some sentiment analysis for the titles and comments.
