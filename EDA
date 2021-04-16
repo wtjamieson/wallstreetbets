@@ -107,4 +107,4 @@ tidy_text %>%
   geom_col() +
   labs(x = "Number of Occurances", y = "Word")
 
-#It would be interesting to do some sentiment analysis for the titles and comments.
+#It would be interesting to do some sentiment analysis for the titles and comments. It looks like there is some difference in the word choice amonst "award winning" users- but at least some of these words seem to be surrounding the promotion of their posts.
