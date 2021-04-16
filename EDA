@@ -3,6 +3,7 @@ rm(list = ls())
 library(tidyverse)
 library(tidymodels)
 library(tidytext)
+library(skimr)
 library(GGally)
 
 #Read in the dataset
@@ -12,6 +13,8 @@ names(df)
 
 split <- initial_split(df, prop = 1/10)
 small_df <- training(split)
+
+skim(df)
 
 #Making a correlation matrix for the numerical variables in the dataset
 
@@ -31,7 +34,32 @@ df %>%
   scale_y_log10() + 
   labs(x = "Total Awards Received", y = "Log(Count)")
 
+df %>%
+  ggplot(aes(x = upvote_ratio)) +
+  geom_histogram(bins = 30) + 
+  scale_y_log10() + 
+  labs(x = "Upvote Ratio", y = "Log(Count)")
 
+#The vast majority of users have far more upvotes than downvotes.
+
+df %>%
+  ggplot(aes(x = score)) +
+  geom_histogram(bins = 30) + 
+  scale_y_log10() + 
+  labs(x = "Score", y = "Log(Count)")
+
+#Most users have a low Reddit score.
+
+
+df %>%
+  ggplot(aes(x = subreddit_subscribers, total_awards_received)) +
+  geom_point(alpha = 0.4) +
+  labs(x = "# of SubReddit Subscribers", y = "Total Awards Received")
+
+#There appears to be an interesting relationship between the number of subscribers and the total awards received. This needs more investigation!
+
+#-------------------------------------------------------------------------------
+#Preliminary text analysis of post titles and text
 #Pull the words out of the post titles
 
 tidy_titles <- df %>%
