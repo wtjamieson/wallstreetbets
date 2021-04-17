@@ -5,9 +5,19 @@ library(tidymodels)
 library(tidytext)
 library(skimr)
 library(GGally)
+library(anytime)
 
 #Read in the dataset
 df <- readr::read_csv("wallstreetbets_posts.csv")
+
+amc <- readr::read_csv("AMC.csv")
+bb <- readr::read_csv("BB.csv")
+amp <- readr::read_csv("AMP.csv")
+gme <- readr::read_csv("GME.csv")
+
+#Convert utc times to standard times
+df$created_utc <- anytime(df$created_utc)
+df$edited <- anytime(df$edited)
 
 names(df)
 
@@ -57,6 +67,55 @@ df %>%
   labs(x = "# of SubReddit Subscribers", y = "Total Awards Received")
 
 #There appears to be an interesting relationship between the number of subscribers and the total awards received. This needs more investigation!
+
+df %>%
+  filter(!is.na(edited)) %>%
+  ggplot(aes(x = created_utc, y = edited)) + 
+  geom_abline(slope = 1, color = "blue") + 
+  geom_point(alpha = 0.4) + 
+  labs(x = "Time Created", y = "Time Edited")
+
+#Many edits happen shortly after the post was created. There seems to be a change in behavior around Feb 1st, when many posts started to be edited longer after they were created. Need to check whether this correlates with some event.
+
+df %>%
+  filter(!is.na(edited)) %>%
+  select(created_utc,edited) %>%
+  mutate(diff = edited -created_utc,
+         date = date(created_utc)) %>%
+  group_by(date) %>%
+  mutate(med_diff = median(diff)) %>%
+  ungroup() %>%
+  ggplot(aes(date,med_diff)) +
+  geom_point() + 
+  labs(x = "Date", y = "Median Difference between Creation and Edit (sec)")
+  
+
+df %>%
+  group_by(banned_by) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(prop = n/sum(n))
+
+#3.2% of posts? authors? are banned by the moderators.
+
+df %>%
+  group_by(is_original_content) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(prop = n/sum(n))
+
+#Most of the posts appear to be reposts.
+
+df %>%
+  filter(author != "[deleted]") %>%
+  select(author) %>%
+  group_by(author) %>%
+  count() %>%
+  ungroup() %>%
+  slice_max(n, n = 30) %>%
+  arrange(desc(n)) %>%
+  print(n=30)
+
 
 #-------------------------------------------------------------------------------
 #Preliminary text analysis of post titles and text
@@ -108,3 +167,108 @@ tidy_text %>%
   labs(x = "Number of Occurances", y = "Word")
 
 #It would be interesting to do some sentiment analysis for the titles and comments. It looks like there is some difference in the word choice amonst "award winning" users- but at least some of these words seem to be surrounding the promotion of their posts.
+
+tidy_text %>%
+  select(word) %>%
+  filter(str_length(word) == 3) %>%
+  anti_join(get_stopwords()) %>%
+  count(word, sort = TRUE) %>%
+  slice_max(n, n = 30) %>%
+  mutate(word = reorder(word,n)) %>%
+  ggplot(aes(n,word)) +
+  geom_col() +
+  labs(x = "Number of Occurances", y = "Word")
+
+#Here I filtered the words to include only 3 letter strings (to see whether I could identify specific stocks).
+
+tidy_text %>%
+  select(word) %>%
+  filter(str_length(word) == 2) %>%
+  anti_join(get_stopwords()) %>%
+  count(word, sort = TRUE) %>%
+  slice_max(n, n = 30) %>%
+  mutate(word = reorder(word,n)) %>%
+  ggplot(aes(n,word)) +
+  geom_col() +
+  labs(x = "Number of Occurances", y = "Word")
+
+#Let's see whether we can identify a relationship between the number of times that "gme" is mentioned in a post text and the opening stock price.
+
+names(gme)[1] <- "date"
+
+tidy_text %>%
+  select(created_utc, word) %>%
+  filter(word == "gme") %>%
+  mutate(date = date(created_utc)) %>%
+  group_by(date) %>%
+  count() %>%
+  ungroup() %>%
+  left_join(gme[,c(1,2)], by = "date") %>%
+  pivot_longer(cols = c("n","Open"), names_to = "variable", values_to = "value") %>%
+  ggplot(aes(date,value, color = variable)) +
+  geom_line() + 
+  facet_grid(variable ~ ., scales = "free_y") +
+  labs(x = "Date")
+
+tidy_text %>%
+  select(created_utc, word) %>%
+  filter(word == "game"|word == "stop") %>%
+  mutate(date = date(created_utc)) %>%
+  group_by(date) %>%
+  count() %>%
+  ungroup() %>%
+  left_join(gme[,c(1,2)], by = "date") %>%
+  pivot_longer(cols = c("n","Open"), names_to = "variable", values_to = "value") %>%
+  ggplot(aes(date,value, color = variable)) +
+  geom_line() + 
+  facet_grid(variable ~ ., scales = "free_y") +
+  labs(x = "Date")
+
+
+#It looks like trading volume does not track as well as the opening price. Perhaps the majority of trading volume was due to non-retail investors.
+
+tidy_text %>%
+  select(created_utc, word) %>%
+  filter(word == "gme") %>%
+  mutate(date = date(created_utc)) %>%
+  group_by(date) %>%
+  count() %>%
+  ungroup() %>%
+  left_join(gme[,c(1,7)], by = "date") %>%
+  pivot_longer(cols = c("n","Volume"), names_to = "variable", values_to = "value") %>%
+  ggplot(aes(date,value, color = variable)) +
+  geom_line() + 
+  facet_grid(variable ~ ., scales = "free_y") +
+  labs(x = "Date")
+  
+#Let's try the same thing with AMP, which is one of the most common words from the post texts.
+
+names(amp)[1] <- "date"
+
+tidy_text %>%
+  select(created_utc, word) %>%
+  filter(word == "amp") %>%
+  mutate(date = date(created_utc)) %>%
+  group_by(date) %>%
+  count() %>%
+  ungroup() %>%
+  left_join(amp[,c(1,2)], by = "date") %>%
+  pivot_longer(cols = c("n","Open"), names_to = "variable", values_to = "value") %>%
+  ggplot(aes(date,value, color = variable)) +
+  geom_line() + 
+  facet_grid(variable ~ ., scales = "free_y") +
+  labs(x = "Date")
+
+tidy_text %>%
+  select(created_utc, word) %>%
+  filter(word == "amp") %>%
+  mutate(date = date(created_utc)) %>%
+  group_by(date) %>%
+  count() %>%
+  ungroup() %>%
+  left_join(amp[,c(1,7)], by = "date") %>%
+  pivot_longer(cols = c("n","Volume"), names_to = "variable", values_to = "value") %>%
+  ggplot(aes(date,value, color = variable)) +
+  geom_line() + 
+  facet_grid(variable ~ ., scales = "free_y") +
+  labs(x = "Date")
